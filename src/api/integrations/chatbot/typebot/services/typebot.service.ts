@@ -43,7 +43,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
     content: string,
     msg?: any,
   ): Promise<void> {
-    // Map the base class call to the original processTypebot method
     await this.processTypebot(
       instance,
       remoteJid,
@@ -256,7 +255,15 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       formats += '~';
     }
 
-    let formattedText = `${formats}${text}${formats.split('').reverse().join('')}`;
+    let formattedText: string;
+    if (formats) {
+      const trimmedText = text.trim();
+      const leadingSpace = text !== text.trimStart() ? ' ' : '';
+      const trailingSpace = text !== text.trimEnd() ? ' ' : '';
+      formattedText = `${leadingSpace}${formats}${trimmedText}${formats.split('').reverse().join('')}${trailingSpace}`;
+    } else {
+      formattedText = text;
+    }
 
     if (element.url) {
       formattedText = element.children[0]?.text ? `[${formattedText}]\n(${element.url})` : `${element.url}`;
@@ -298,20 +305,69 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       return null;
     };
 
-    for (const message of messages) {
-      if (message.type === 'text') {
-        let formattedText = '';
+    // Helpers portados do código oficial do Typebot
+    const trimTextTo20Chars = (text: string, existingTitles: string[] = []): string => {
+      const baseTitle = text.length > 20 ? `${text.slice(0, 18)}..` : text;
+      if (!existingTitles.includes(baseTitle)) return baseTitle;
+      let counter = 1;
+      let uniqueTitle = '';
+      do {
+        const suffix = `(${counter})`;
+        const availableChars = 20 - suffix.length - 3;
+        uniqueTitle = `${text.slice(0, availableChars)} ${suffix}..`;
+        counter++;
+      } while (existingTitles.includes(uniqueTitle));
+      return uniqueTitle;
+    };
 
-        for (const richText of message.content.richText) {
-          for (const element of richText.children) {
-            formattedText += applyFormatting(element);
-          }
-          formattedText += '\n';
+    const getUniqueButtonTitles = (texts: string[]): string[] => {
+      const uniqueTitles: string[] = [];
+      return texts.map((text) => {
+        const uniqueTitle = trimTextTo20Chars(text, uniqueTitles);
+        uniqueTitles.push(uniqueTitle);
+        return uniqueTitle;
+      });
+    };
+
+    // Helper para formatar uma mensagem de texto do Typebot
+    const formatTextMessage = (message: any): string => {
+      let formattedText = '';
+      for (const richText of message.content.richText) {
+        for (const element of richText.children) {
+          formattedText += applyFormatting(element);
         }
+        formattedText += '\n';
+      }
+      return formattedText
+        .replace(/\*\*(.*?)\*\*/g, '*$1*')
+        .replace(/__(.*?)__/g, '_$1_')
+        .replace(/~~(.*?)~~/g, '~$1~')
+        .replace(/\n$/, '');
+    };
 
-        formattedText = formattedText.replace(/\*\*/g, '').replace(/__/, '').replace(/~~/, '').replace(/\n$/, '');
+    // Pré-escaneia: se houver choice input, intercepta a última mensagem de texto
+    // para usá-la como body do botão (evita duplicação)
+    let lastFormattedText = '';
+    let interceptIndex = -1;
 
-        formattedText = formattedText.replace(/\n$/, '');
+    if (input?.type === 'choice input') {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].type === 'text') {
+          interceptIndex = i;
+          lastFormattedText = formatTextMessage(messages[i]);
+          break;
+        }
+      }
+    }
+
+    for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
+      // Pula a última mensagem de texto — será usada como body dos botões
+      if (msgIdx === interceptIndex) continue;
+
+      const message = messages[msgIdx];
+
+      if (message.type === 'text') {
+        const formattedText = formatTextMessage(message);
 
         if (formattedText.includes('[list]')) {
           await this.processListMessage(instance, formattedText, session.remoteJid);
@@ -375,25 +431,41 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       }
     }
 
-    // Process input choices
+    // Process input choices — grupos de 3 botões (padrão oficial Typebot)
     if (input) {
       if (input.type === 'choice input') {
-        let formattedText = '';
+        const validItems = (input.items as any[]).filter((item) => item.content);
 
-        const items = input.items;
-
-        for (const item of items) {
-          formattedText += `▶️ ${item.content}\n`;
+        // Agrupa em batches de 3 (limite da API do WhatsApp para botões reply)
+        const groups: any[][] = [];
+        for (let i = 0; i < validItems.length; i += 3) {
+          groups.push(validItems.slice(i, i + 3));
         }
 
-        formattedText = formattedText.replace(/\n$/, '');
+        for (let idx = 0; idx < groups.length; idx++) {
+          const group = groups[idx];
+          const bodyText = idx === 0 ? lastFormattedText || '―' : '―';
+          const titles = getUniqueButtonTitles(group.map((item) => item.content as string));
 
-        if (formattedText.includes('[list]')) {
-          await this.processListMessage(instance, formattedText, session.remoteJid);
-        } else if (formattedText.includes('[buttons]')) {
-          await this.processButtonMessage(instance, formattedText, session.remoteJid);
-        } else {
-          await this.sendMessageWhatsApp(instance, session.remoteJid, formattedText, settings, true);
+          const buttonJson = {
+            number: session.remoteJid,
+            title: bodyText,
+            description: '\u200B',
+            footer: '',
+            buttons: group.map((item, index) => ({
+              type: 'reply',
+              displayText: titles[index],
+              id: item.value || item.id || `btn_${idx * 3 + index}`,
+            })),
+          };
+
+          try {
+            await instance.buttonMessage(buttonJson);
+          } catch (err) {
+            this.logger.warn(`[TypebotService] buttonMessage falhou no grupo ${idx + 1}, usando fallback em texto`);
+            const fallbackText = group.map((item) => `▶️ ${item.content}`).join('\n');
+            await this.sendMessageWhatsApp(instance, session.remoteJid, fallbackText, settings, true);
+          }
         }
 
         sendTelemetry('/message/sendText');
@@ -581,7 +653,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
     content: string,
     prefilledVariables?: any,
   ) {
-    // Get the database instance record
     const instance = await this.prismaRepository.instance.findFirst({
       where: {
         name: waInstance.instanceName,
@@ -592,7 +663,7 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       this.logger.error('Instance not found in database');
       return;
     }
-    // Handle session expiration
+
     if (session && expire && expire > 0) {
       const now = Date.now();
       const sessionUpdatedAt = new Date(session.updatedAt).getTime();
@@ -763,7 +834,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       return;
     }
 
-    // Handle new sessions
     if (!session) {
       const data = await this.createNewSession(instance, {
         enabled: findTypebot?.enabled,
@@ -902,7 +972,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       return;
     }
 
-    // Update existing session
     await this.prismaRepository.integrationSession.update({
       where: {
         id: session.id,
@@ -967,7 +1036,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       return;
     }
 
-    // Continue existing chat
     const version = this.configService.get<Typebot>('TYPEBOT').API_VERSION;
     let urlTypebot: string;
     let reqData: { message: string; sessionId?: string };
@@ -984,7 +1052,6 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
       };
     }
 
-    // Handle audio transcription if OpenAI service is available
     if (this.isAudioMessage(content) && msg) {
       try {
         this.logger.debug(`[TypeBot] Downloading audio for Whisper transcription`);

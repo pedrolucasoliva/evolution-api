@@ -1080,10 +1080,9 @@ export class BusinessStartupService extends ChannelStartupService {
             type: 'interactive',
             interactive: {
               type: 'list',
-              header: {
-                type: 'text',
-                text: message['listMessage']['title'],
-              },
+              ...(message['listMessage']['title']
+                ? { header: { type: 'text', text: message['listMessage']['title'] } }
+                : {}),
               body: {
                 text: message['listMessage']['description'],
               },
