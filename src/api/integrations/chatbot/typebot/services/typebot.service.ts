@@ -97,6 +97,8 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
             ...data.prefilledVariables,
             remoteJid: data.remoteJid,
             pushName: data.pushName || data.prefilledVariables?.pushName || '',
+            phone: data.remoteJid.split('@')[0],
+            name: data.pushName || data.prefilledVariables?.name || '',
             instanceName: instance.name,
             serverUrl: this.configService.get<HttpServer>('SERVER').URL,
             apiKey: this.configService.get<Auth>('AUTHENTICATION').API_KEY.KEY,
@@ -113,6 +115,8 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
               ...data.prefilledVariables,
               remoteJid: data.remoteJid,
               pushName: data.pushName || data.prefilledVariables?.pushName || '',
+              phone: data.remoteJid.split('@')[0],
+              name: data.pushName || data.prefilledVariables?.name || '',
               instanceName: instance.name,
               serverUrl: this.configService.get<HttpServer>('SERVER').URL,
               apiKey: this.configService.get<Auth>('AUTHENTICATION').API_KEY.KEY,
@@ -701,7 +705,10 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
           remoteJid: remoteJid,
           pushName: msg.pushName,
           botId: findTypebot.id,
-          prefilledVariables: prefilledVariables,
+          prefilledVariables: {
+            ...prefilledVariables,
+            userMessage: content || '',
+          },
         });
 
         if (data?.session) {
@@ -847,7 +854,10 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
         remoteJid: remoteJid,
         pushName: msg?.pushName,
         botId: findTypebot.id,
-        prefilledVariables: prefilledVariables,
+        prefilledVariables: {
+          ...prefilledVariables,
+          userMessage: content || '',
+        },
       });
 
       if (data?.session) {
