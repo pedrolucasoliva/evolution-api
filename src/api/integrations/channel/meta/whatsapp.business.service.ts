@@ -392,6 +392,9 @@ export class BusinessStartupService extends ChannelStartupService {
       if (received.messages) {
         const message = received.messages[0]; // Añadir esta línea para definir message
 
+        // Extrair ctwa_clid do referral (presente apenas em mensagens originadas de anúncios Click-to-WhatsApp)
+        const ctwaClid: string | null = message?.referral?.ctwa_clid ?? null;
+
         const key = {
           id: message.id,
           remoteJid: this.phoneNumber,
@@ -410,6 +413,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(message.timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         } else if (this.isMediaMessage(message)) {
           const messageContent =
@@ -424,6 +428,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
 
           if (this.configService.get<S3>('S3').ENABLE) {
@@ -607,6 +612,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         } else if (received?.messages[0].button) {
           messageRaw = {
@@ -620,6 +626,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         } else if (received?.messages[0].reaction) {
           messageRaw = {
@@ -633,6 +640,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         } else if (received?.messages[0].contacts) {
           messageRaw = {
@@ -646,6 +654,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         } else {
           messageRaw = {
@@ -657,6 +666,7 @@ export class BusinessStartupService extends ChannelStartupService {
             messageTimestamp: parseInt(received.messages[0].timestamp) as number,
             source: 'unknown',
             instanceId: this.instanceId,
+            ctwaClid,
           };
         }
 
