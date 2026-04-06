@@ -708,7 +708,13 @@ export class TypebotService extends BaseChatbotService<TypebotModel, any> {
           prefilledVariables: {
             ...prefilledVariables,
             userMessage: content || '',
-            ctwa_clid: (msg as any)?.ctwaClid ?? '',
+            ctwa_clid: (msg as any)?.adReferral?.ctwaClid ?? '',
+            ad_source_id: (msg as any)?.adReferral?.sourceId ?? '',
+            ad_source_url: (msg as any)?.adReferral?.sourceUrl ?? '',
+            ad_headline: (msg as any)?.adReferral?.headline ?? '',
+            ad_body: (msg as any)?.adReferral?.body ?? '',
+            ad_media_type: (msg as any)?.adReferral?.mediaType ?? '',
+            ad_image_url: (msg as any)?.adReferral?.imageUrl ?? '',
           },
         });
 
